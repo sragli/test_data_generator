@@ -1,3 +1,2 @@
 defmodule TestDataGenerator do
-
 end

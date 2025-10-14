@@ -45,17 +45,16 @@ defmodule BinaryMatrixGenerator do
     normalized_weights = Enum.map(weights, &(&1 / weight_sum))
 
     # Generate features at different scales
-    features = Enum.zip(scales, normalized_weights)
-    |> Enum.map(fn {scale, weight} ->
-      feature_matrix = create_scale_features(height, width, scale)
-      Nx.multiply(feature_matrix, weight)
-    end)
+    features =
+      Enum.zip(scales, normalized_weights)
+      |> Enum.map(fn {scale, weight} ->
+        feature_matrix = create_scale_features(height, width, scale)
+        Nx.multiply(feature_matrix, weight)
+      end)
 
-    # Combine all scales
-    combined = Enum.reduce(features, fn matrix, acc -> Nx.add(acc, matrix) end)
-
-    # Convert to binary
-    Nx.greater(combined, 0.4)
+    # Combine all scales and convert to binary
+    Enum.reduce(features, fn matrix, acc -> Nx.add(acc, matrix) end)
+    |> Nx.greater(0.4)
     |> Nx.as_type({:u, 8})
   end
 
@@ -74,18 +73,14 @@ defmodule BinaryMatrixGenerator do
 
   @doc """
   Creates a binary matrix with island-like features of varying sizes.
+
+  Starting with an empty matrix, placing random seeds and growing islands from these seeds.
   """
   def create_island_features(height, width, num_seeds \\ 10, growth_probability \\ 0.7) do
-    # Start with empty matrix
-    matrix = Nx.broadcast(0, {height, width}) |> Nx.as_type({:u, 8})
-
-    # Place random seeds
-    seeds = place_random_seeds(matrix, num_seeds)
-
-    # Grow islands from seeds
-    grown = grow_islands(seeds, growth_probability, 5)
-
-    grown
+    Nx.broadcast(0, {height, width})
+    |> Nx.as_type({:u, 8})
+    |> place_random_seeds(num_seeds)
+    |> grow_islands(growth_probability, 5)
   end
 
   defp apply_kernel(tensor, kernel) do
@@ -96,13 +91,13 @@ defmodule BinaryMatrixGenerator do
     pad_h = div(kh, 2)
     pad_w = div(kw, 2)
 
-    # Create result tensor
     result = Nx.broadcast(0.0, {h, w})
 
     # Apply kernel (simplified - would be more efficient with proper convolution)
-    indices = for i <- pad_h..(h - pad_h - 1),
-                  j <- pad_w..(w - pad_w - 1),
-                  do: {i, j}
+    indices =
+      for i <- pad_h..(h - pad_h - 1),
+          j <- pad_w..(w - pad_w - 1),
+          do: {i, j}
 
     Enum.reduce(indices, result, fn {i, j}, acc ->
       # Extract neighborhood
@@ -138,20 +133,21 @@ defmodule BinaryMatrixGenerator do
     neighbor_counts = Nx.broadcast(0, {h, w}) |> Nx.as_type({:u, 8})
 
     # For each cell, count living neighbors
-    indices = for i <- 1..(h-2), j <- 1..(w-2), do: {i, j}
+    indices = for i <- 1..(h - 2), j <- 1..(w - 2), do: {i, j}
 
-    neighbor_counts = Enum.reduce(indices, neighbor_counts, fn {i, j}, acc ->
-      # Get 3x3 neighborhood
-      neighborhood = Nx.slice(binary_matrix, [i-1, j-1], [3, 3])
+    neighbor_counts =
+      Enum.reduce(indices, neighbor_counts, fn {i, j}, acc ->
+        # Get 3x3 neighborhood
+        neighborhood = Nx.slice(binary_matrix, [i - 1, j - 1], [3, 3])
 
-      # Count neighbors (exclude center cell)
-      center_value = binary_matrix[i][j] |> Nx.to_number()
-      neighbor_sum = Nx.sum(neighborhood) |> Nx.to_number()
-      neighbor_count = neighbor_sum - center_value
+        # Count neighbors (exclude center cell)
+        center_value = binary_matrix[i][j] |> Nx.to_number()
+        neighbor_sum = Nx.sum(neighborhood) |> Nx.to_number()
+        neighbor_count = neighbor_sum - center_value
 
-      # Update count
-      Nx.put_slice(acc, [i, j], Nx.reshape(Nx.tensor(neighbor_count), {1, 1}))
-    end)
+        # Update count
+        Nx.put_slice(acc, [i, j], Nx.reshape(Nx.tensor(neighbor_count), {1, 1}))
+      end)
 
     # Apply evolution rules
     current_cells = Nx.greater(binary_matrix, 0)
@@ -166,12 +162,13 @@ defmodule BinaryMatrixGenerator do
     {h, w} = Nx.shape(matrix)
 
     # Generate random positions
-    seeds = 1..num_seeds
-    |> Enum.map(fn _ ->
-      i = :rand.uniform(h) - 1
-      j = :rand.uniform(w) - 1
-      {i, j}
-    end)
+    seeds =
+      1..num_seeds
+      |> Enum.map(fn _ ->
+        i = :rand.uniform(h) - 1
+        j = :rand.uniform(w) - 1
+        {i, j}
+      end)
 
     # Place seeds
     Enum.reduce(seeds, matrix, fn {i, j}, acc ->
@@ -190,7 +187,7 @@ defmodule BinaryMatrixGenerator do
     new_matrix = current_matrix
 
     # For each empty cell adjacent to a filled cell, maybe grow
-    indices = for i <- 1..(h-2), j <- 1..(w-2), do: {i, j}
+    indices = for i <- 1..(h - 2), j <- 1..(w - 2), do: {i, j}
 
     Enum.reduce(indices, new_matrix, fn {i, j}, acc ->
       current_value = current_matrix[i][j] |> Nx.to_number()
@@ -198,10 +195,10 @@ defmodule BinaryMatrixGenerator do
       if current_value == 0 do
         # Check if adjacent to a filled cell
         neighbors = [
-          current_matrix[i-1][j] |> Nx.to_number(),
-          current_matrix[i+1][j] |> Nx.to_number(),
-          current_matrix[i][j-1] |> Nx.to_number(),
-          current_matrix[i][j+1] |> Nx.to_number()
+          current_matrix[i - 1][j] |> Nx.to_number(),
+          current_matrix[i + 1][j] |> Nx.to_number(),
+          current_matrix[i][j - 1] |> Nx.to_number(),
+          current_matrix[i][j + 1] |> Nx.to_number()
         ]
 
         has_neighbor = Enum.any?(neighbors, fn n -> n > 0 end)
