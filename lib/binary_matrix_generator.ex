@@ -158,22 +158,19 @@ defmodule BinaryMatrixGenerator do
     |> Nx.as_type({:u, 8})
   end
 
+  # Place seeds at random positions
   defp place_random_seeds(matrix, num_seeds) do
     {h, w} = Nx.shape(matrix)
 
-    # Generate random positions
-    seeds =
-      1..num_seeds
-      |> Enum.map(fn _ ->
-        i = :rand.uniform(h) - 1
-        j = :rand.uniform(w) - 1
-        {i, j}
-      end)
-
-    # Place seeds
-    Enum.reduce(seeds, matrix, fn {i, j}, acc ->
-      Nx.put_slice(acc, [i, j], Nx.reshape(Nx.tensor(1), {1, 1}))
+    1..num_seeds
+    |> Enum.map(fn _ ->
+      i = :rand.uniform(h) - 1
+      j = :rand.uniform(w) - 1
+      {i, j}
     end)
+    |> Enum.reduce(matrix, fn {i, j}, acc ->
+        Nx.put_slice(acc, [i, j], Nx.reshape(Nx.tensor(1), {1, 1}))
+      end)
   end
 
   defp grow_islands(seed_matrix, growth_prob, max_iterations) do
